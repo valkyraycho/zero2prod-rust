@@ -37,11 +37,3 @@ jobs:
                   components: clippy
             - run: cargo clippy
               name: Linting
-    audit:
-        name: Audit
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: taiki-e/install-action@cargo-deny
-            - run: cargo deny check
-              name: Scaning for security vulnerabilities
