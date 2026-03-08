@@ -1,7 +1,84 @@
+# Configuration for prek (pre-commit hooks)
+# Run `prek install` to activate, `prek run --all-files` to test
+
+fail_fast = false
+
+# ── Remote hooks: general file hygiene ──────────────────────────────────────
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
-rev = "v6.0.0"
+rev = "v5.0.0"
 hooks = [
-  { id = "check-yaml" },
-  { id = "end-of-file-fixer" },
+    { id = "trailing-whitespace" },
+    { id = "end-of-file-fixer" },
+    { id = "check-yaml" },
+    { id = "check-toml" },
+    { id = "check-merge-conflict" },
+    { id = "check-added-large-files", args = ["--maxkb=500"] },
+    { id = "detect-private-key" },
 ]
+
+# ── Local hooks: Rust toolchain ─────────────────────────────────────────────
+[[repos]]
+repo = "local"
+
+# 1. Format check — fast, catches style issues early
+[[repos.hooks]]
+id = "cargo-fmt"
+name = "cargo fmt"
+language = "system"
+entry = "cargo fmt -- --check"
+pass_filenames = false
+types = ["rust"]
+description = "Check that all Rust code is formatted"
+
+# 2. Clippy — catches common mistakes, correctness issues, and anti-patterns
+[[repos.hooks]]
+id = "cargo-clippy"
+name = "cargo clippy"
+language = "system"
+entry = "cargo clippy --all-targets --all-features -- -D warnings"
+pass_filenames = false
+types = ["rust"]
+description = "Lint Rust code with clippy (deny all warnings)"
+
+# 3. Compile check — ensures the project builds (faster than full build)
+[[repos.hooks]]
+id = "cargo-check"
+name = "cargo check"
+language = "system"
+entry = "cargo check --all-targets --all-features"
+pass_filenames = false
+types = ["rust"]
+description = "Verify the project compiles without errors"
+
+# 4. Tests — run the test suite (pre-push only to keep commits fast)
+[[repos.hooks]]
+id = "cargo-test"
+name = "cargo test"
+language = "system"
+entry = "cargo test"
+pass_filenames = false
+types = ["rust"]
+stages = ["pre-push"]
+description = "Run all tests (pre-push only to keep commits fast)"
+
+# 5. Check for leftover debugging statements
+[[repos.hooks]]
+id = "no-dbg"
+name = "no dbg! macros"
+language = "system"
+entry = "bash -c 'if grep -rn \"dbg!\" --include=\"*.rs\" src/ tests/ 2>/dev/null; then echo \"\\nRemove dbg! macros before committing\"; exit 1; fi'"
+pass_filenames = false
+always_run = true
+description = "Ensure no dbg! macros are left in source code"
+
+# 6. Check for TODO/FIXME markers (non-blocking warning)
+[[repos.hooks]]
+id = "check-todos"
+name = "check TODOs"
+language = "system"
+entry = "bash -c 'TODOS=$(grep -rn \"TODO\\|FIXME\\|HACK\\|XXX\" --include=\"*.rs\" src/ 2>/dev/null); if [ -n \"$TODOS\" ]; then echo \"$TODOS\"; echo \"\\nWarning: found TODO/FIXME markers (not blocking)\"; fi; exit 0'"
+pass_filenames = false
+always_run = true
+verbose = true
+description = "Warn about TODO/FIXME comments (non-blocking)"
