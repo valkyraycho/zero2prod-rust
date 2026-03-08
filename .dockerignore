@@ -1,0 +1,11 @@
+.idea
+target/
+.git
+.gitignore
+Dockerfile
+docker-compose.yml
+compose.yml
+.env
+tests/
+scripts/
+migrations/
