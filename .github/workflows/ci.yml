@@ -65,11 +65,13 @@ jobs:
     clippy:
         name: Clippy
         runs-on: ubuntu-latest
+        env:
+            SQLX_OFFLINE: true
         steps:
             - uses: actions/checkout@v4
             - uses: Swatinem/rust-cache@v2
             - uses: dtolnay/rust-toolchain@stable
               with:
                   components: clippy
-            - run: cargo clippy
+            - run: cargo clippy -- -D warnings
               name: Linting
