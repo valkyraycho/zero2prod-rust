@@ -17,6 +17,8 @@ jobs:
     test:
         name: Test
         runs-on: ubuntu-latest
+        env:
+            SQLX_OFFLINE: true
         services:
             postgres:
                 image: postgres:18-alpine
@@ -73,5 +75,5 @@ jobs:
             - uses: dtolnay/rust-toolchain@stable
               with:
                   components: clippy
-            - run: cargo clippy -- -D warningsg
+            - run: cargo clippy -- -D warning
               name: Linting
