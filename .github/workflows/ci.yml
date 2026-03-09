@@ -31,11 +31,11 @@ jobs:
             - uses: dtolnay/rust-toolchain@stable
             - name: Install sqlx-cli
               run: |
-                  cargo install sqlx-cli
-                  --version ${{ env.SQLX_VERSION }}
-                  --no-default-features
-                  --features ${{ env.SQLX_FEATURES }}
-                  --locked
+                  cargo install sqlx-cli \
+                    --version ${{ env.SQLX_VERSION }} \
+                    --no-default-features \
+                    --features ${{ env.SQLX_FEATURES }} \
+                    --locked
             - uses: Swatinem/rust-cache@v2
             - run: cargo test
               name: Testing
@@ -73,5 +73,5 @@ jobs:
             - uses: dtolnay/rust-toolchain@stable
               with:
                   components: clippy
-            - run: cargo clippy -- -D warnings
+            - run: cargo clippy -- -D warningsg
               name: Linting
