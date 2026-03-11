@@ -203,11 +203,11 @@ pub async fn send_confirmation_email(
         confirmation_link
     );
     email_client
-        .send_email(new_subscriber.email, "Welcome!", &html_body, &plain_body)
+        .send_email(&new_subscriber.email, "Welcome!", &html_body, &plain_body)
         .await
 }
 
-fn error_chain_fmt(e: &impl Error, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+pub fn error_chain_fmt(e: &impl Error, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     writeln!(f, "{}\n", e)?;
     let mut current = e.source();
     while let Some(cause) = current {
