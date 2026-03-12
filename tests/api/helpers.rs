@@ -8,6 +8,8 @@ use zero2prod::{
     telemetry::{get_subscriber, init_subscriber},
 };
 
+use crate::newsletter::add_test_user;
+
 static TRACING: Lazy<()> = Lazy::new(|| {
     let default_filter_level = "info".to_string();
     let subscriber_name = "test".to_string();
@@ -62,12 +64,22 @@ impl TestApp {
     }
 
     pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
+        let (username, password) = self.test_user().await;
         reqwest::Client::new()
             .post(format!("{}/newsletters", &self.address))
+            .basic_auth(username, Some(password))
             .json(&body)
             .send()
             .await
             .expect("Failed to execute request.")
+    }
+
+    pub async fn test_user(&self) -> (String, String) {
+        let row = sqlx::query!("SELECT username, password FROM users LIMIT 1",)
+            .fetch_one(&self.db_pool)
+            .await
+            .expect("Failed to fetch saved user.");
+        (row.username, row.password)
     }
 }
 
@@ -91,12 +103,14 @@ pub async fn spawn_app() -> TestApp {
     let application_port = application.port();
     let address = format!("http://127.0.0.1:{}", application_port);
     std::mem::drop(tokio::spawn(application.run_until_stopped()));
-    TestApp {
+    let test_app = TestApp {
         address,
         db_pool: get_connection_pool(&configuration.database),
         port: application_port,
         email_server,
-    }
+    };
+    add_test_user(&test_app.db_pool).await;
+    test_app
 }
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {

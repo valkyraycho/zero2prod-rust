@@ -1,3 +1,5 @@
+use sqlx::PgPool;
+use uuid::Uuid;
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{any, method, path},
@@ -117,4 +119,39 @@ async fn newsletters_returns_400_for_invalid_data() {
             error_message
         );
     }
+}
+
+#[tokio::test]
+async fn requests_missing_authorization_are_rejected() {
+    let app = spawn_app().await;
+    let response = reqwest::Client::new()
+        .post(format!("{}/newsletters", &app.address))
+        .json(&serde_json::json!({
+            "title": "Newsletter title",
+            "content": {
+                "text": "Newsletter body as plain text",
+                "html": "<p>Newsletter body as HTML</p>",
+            }
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+    assert_eq!(401, response.status().as_u16());
+    assert_eq!(
+        r#"Basic realm="publish""#,
+        response.headers().get("WWW-Authenticate").unwrap()
+    );
+}
+
+pub async fn add_test_user(pool: &PgPool) {
+    sqlx::query!(
+        "INSERT INTO users (user_id, username, password)
+        VALUES ($1, $2, $3)",
+        Uuid::new_v4(),
+        Uuid::new_v4().to_string(),
+        Uuid::new_v4().to_string()
+    )
+    .execute(pool)
+    .await
+    .expect("Failed to create test user.");
 }
