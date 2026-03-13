@@ -13,6 +13,7 @@ use base64::{Engine, engine::general_purpose};
 use secrecy::{ExposeSecret, SecretString};
 
 use sqlx::PgPool;
+use tokio::task::JoinHandle;
 
 #[derive(serde::Deserialize)]
 pub struct BodyData {
@@ -178,21 +179,45 @@ async fn validate_credentials(
         .map_err(PublishError::UnexpectedError)?
         .ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Unknown username.")))?;
 
-    let expected_password_hash = PasswordHash::new(expected_password_hash.expose_secret())
-        .map_err(|e| anyhow::anyhow!(e.to_string()))
-        .map_err(PublishError::UnexpectedError)?;
-
-    tracing::info_span!("Verify password hash")
-        .in_scope(|| {
-            Argon2::default().verify_password(
-                credentials.password.expose_secret().as_bytes(),
-                &expected_password_hash,
-            )
-        })
-        .map_err(|e| anyhow::anyhow!(e.to_string()))
-        .context("Invalid password.")
-        .map_err(PublishError::AuthError)?;
+    spawn_blocking_with_tracing(move || {
+        verify_password_hash(expected_password_hash, credentials.password)
+    })
+    .await
+    .context("Failed to spawn blocking task.")
+    .map_err(PublishError::UnexpectedError)?
+    .map_err(|e| anyhow::anyhow!(e.to_string()))
+    .context("Invalid password.")
+    .map_err(PublishError::AuthError)?;
     Ok(user_id)
+}
+
+pub fn spawn_blocking_with_tracing<F, R>(f: F) -> JoinHandle<R>
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    let current_span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || current_span.in_scope(f))
+}
+
+#[tracing::instrument(
+    name = "Verify password hash",
+    skip(expected_password_hash, password_candidate)
+)]
+fn verify_password_hash(
+    expected_password_hash: SecretString,
+    password_candidate: SecretString,
+) -> Result<(), PublishError> {
+    let expected_password_hash = PasswordHash::new(expected_password_hash.expose_secret())
+        .map_err(|_| PublishError::UnexpectedError(anyhow::anyhow!("Failed to parse hash.")))?;
+
+    Argon2::default()
+        .verify_password(
+            password_candidate.expose_secret().as_bytes(),
+            &expected_password_hash,
+        )
+        .map_err(|e| PublishError::UnexpectedError(anyhow::anyhow!(e.to_string())))?;
+    Ok(())
 }
 
 #[tracing::instrument(name = "Get stored credentials", skip(username, pool))]
