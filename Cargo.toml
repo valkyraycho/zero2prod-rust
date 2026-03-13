@@ -34,10 +34,11 @@ reqwest = { version = "0.13.2", default-features = false, features = [
     "json",
     "rustls",
 ] }
-rand = { version = "0.10.0", features = ["std_rng"] }
+rand = { version = "0.10.0", features = ["std", "std_rng"] }
 thiserror = "2.0.18"
 anyhow = "1.0.102"
 base64 = "0.22.1"
+argon2 = "0.5.3"
 
 
 [dependencies.sqlx]
