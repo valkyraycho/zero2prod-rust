@@ -67,7 +67,7 @@ fn verify_password_hash(
             &expected_password_hash,
         )
         .context("Invalid password")
-        .map_err(AuthError::UnexpectedError)?;
+        .map_err(AuthError::InvalidCredentials)?;
     Ok(())
 }
 
