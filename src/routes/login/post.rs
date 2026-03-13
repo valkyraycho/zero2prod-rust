@@ -2,19 +2,17 @@ use std::fmt::Debug;
 
 use actix_web::{
     HttpResponse, ResponseError,
+    cookie::Cookie,
     error::InternalError,
     http::{StatusCode, header::LOCATION},
     web,
 };
-use hmac::{Hmac, Mac};
-use secrecy::{ExposeSecret, SecretString};
-use sha2::Sha256;
+use secrecy::SecretString;
 use sqlx::PgPool;
 
 use crate::{
     authentication::{AuthError, Credentials, validate_credentials},
     routes::error_chain_fmt,
-    startup::HmacSecret,
 };
 
 #[derive(serde::Deserialize)]
@@ -23,11 +21,10 @@ pub struct Formdata {
     password: SecretString,
 }
 
-#[tracing::instrument(skip(form, pool, secret), fields(username=tracing::field::Empty))]
+#[tracing::instrument(skip(form, pool), fields(username=tracing::field::Empty))]
 pub async fn login(
     form: web::Form<Formdata>,
     pool: web::Data<PgPool>,
-    secret: web::Data<HmacSecret>,
 ) -> Result<HttpResponse, InternalError<LoginError>> {
     let credentials = Credentials {
         username: form.0.username,
@@ -46,13 +43,9 @@ pub async fn login(
                 AuthError::InvalidCredentials(_) => LoginError::AuthError(e.into()),
                 AuthError::UnexpectedError(_) => LoginError::UnexpectedError(e.into()),
             };
-            let query_string = format!("error={}", urlencoding::Encoded::new(e.to_string()));
-            let mut mac =
-                Hmac::<Sha256>::new_from_slice(secret.0.expose_secret().as_bytes()).unwrap();
-            mac.update(query_string.as_bytes());
-            let hmac_tag = mac.finalize().into_bytes();
             let response = HttpResponse::SeeOther()
-                .insert_header((LOCATION, format!("/login?{query_string}&tag={hmac_tag:x}")))
+                .insert_header((LOCATION, "/login"))
+                .cookie(Cookie::new("_flash", e.to_string()))
                 .finish();
             Err(InternalError::from_response(e, response))
         }
@@ -61,9 +54,9 @@ pub async fn login(
 
 #[derive(thiserror::Error)]
 pub enum LoginError {
-    #[error("Authentication failed")]
+    #[error("Authentication failed.")]
     AuthError(#[source] anyhow::Error),
-    #[error("Something went wrong")]
+    #[error("Something went wrong.")]
     UnexpectedError(#[from] anyhow::Error),
 }
 
