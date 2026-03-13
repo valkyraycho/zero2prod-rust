@@ -2,15 +2,19 @@ use std::fmt::Debug;
 
 use actix_web::{
     HttpResponse, ResponseError,
+    error::InternalError,
     http::{StatusCode, header::LOCATION},
     web,
 };
-use secrecy::SecretString;
+use hmac::{Hmac, Mac};
+use secrecy::{ExposeSecret, SecretString};
+use sha2::Sha256;
 use sqlx::PgPool;
 
 use crate::{
     authentication::{AuthError, Credentials, validate_credentials},
     routes::error_chain_fmt,
+    startup::HmacSecret,
 };
 
 #[derive(serde::Deserialize)]
@@ -19,27 +23,40 @@ pub struct Formdata {
     password: SecretString,
 }
 
-#[tracing::instrument(skip(form, pool), fields(username=tracing::field::Empty))]
+#[tracing::instrument(skip(form, pool, secret), fields(username=tracing::field::Empty))]
 pub async fn login(
     form: web::Form<Formdata>,
     pool: web::Data<PgPool>,
-) -> Result<HttpResponse, LoginError> {
+    secret: web::Data<HmacSecret>,
+) -> Result<HttpResponse, InternalError<LoginError>> {
     let credentials = Credentials {
         username: form.0.username,
         password: form.0.password,
     };
 
-    tracing::Span::current().record("username", tracing::field::display(&credentials.username));
-    let user_id = validate_credentials(credentials, &pool)
-        .await
-        .map_err(|e| match e {
-            AuthError::InvalidCredentials(_) => LoginError::AuthError(e.into()),
-            AuthError::UnexpectedError(_) => LoginError::UnexpectedError(e.into()),
-        })?;
-    tracing::Span::current().record("user_id", tracing::field::display(&user_id));
-    Ok(HttpResponse::SeeOther()
-        .insert_header((LOCATION, "/admin/dashboard"))
-        .finish())
+    match validate_credentials(credentials, &pool).await {
+        Ok(user_id) => {
+            tracing::Span::current().record("user_id", tracing::field::display(&user_id));
+            Ok(HttpResponse::SeeOther()
+                .insert_header((LOCATION, "/admin/dashboard"))
+                .finish())
+        }
+        Err(e) => {
+            let e = match e {
+                AuthError::InvalidCredentials(_) => LoginError::AuthError(e.into()),
+                AuthError::UnexpectedError(_) => LoginError::UnexpectedError(e.into()),
+            };
+            let query_string = format!("error={}", urlencoding::Encoded::new(e.to_string()));
+            let mut mac =
+                Hmac::<Sha256>::new_from_slice(secret.0.expose_secret().as_bytes()).unwrap();
+            mac.update(query_string.as_bytes());
+            let hmac_tag = mac.finalize().into_bytes();
+            let response = HttpResponse::SeeOther()
+                .insert_header((LOCATION, format!("/login?{query_string}&tag={hmac_tag:x}")))
+                .finish();
+            Err(InternalError::from_response(e, response))
+        }
+    }
 }
 
 #[derive(thiserror::Error)]
@@ -57,13 +74,6 @@ impl Debug for LoginError {
 }
 
 impl ResponseError for LoginError {
-    fn error_response(&self) -> HttpResponse<actix_web::body::BoxBody> {
-        let encoded_error = urlencoding::Encoded::new(self.to_string());
-
-        HttpResponse::build(self.status_code())
-            .insert_header((LOCATION, format!("/login?error={}", encoded_error)))
-            .finish()
-    }
     fn status_code(&self) -> actix_web::http::StatusCode {
         match self {
             Self::AuthError(_) => StatusCode::UNAUTHORIZED,
