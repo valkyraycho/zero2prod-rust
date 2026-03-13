@@ -1,10 +1,10 @@
-use std::io::{Result, stdout};
+use std::io::stdout;
 use zero2prod::configuration::get_configuration;
 use zero2prod::startup::Application;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let subscriber = get_subscriber("zero2prod".into(), "info".into(), stdout);
     init_subscriber(subscriber);
 
