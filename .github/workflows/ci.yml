@@ -71,5 +71,5 @@ jobs:
             - uses: dtolnay/rust-toolchain@stable
               with:
                   components: clippy
-            - run: cargo clippy -- -D warning
+            - run: cargo clippy -- -D warnings
               name: Linting

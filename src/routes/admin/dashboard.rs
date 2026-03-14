@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 use actix_web::{
     HttpResponse,
@@ -9,14 +9,7 @@ use anyhow::Context;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::session_state::TypedSession;
-
-fn e500<T>(e: T) -> actix_web::Error
-where
-    T: Debug + Display + 'static,
-{
-    actix_web::error::ErrorInternalServerError(e)
-}
+use crate::{session_state::TypedSession, utils::e500};
 
 pub async fn admin_dashboard(
     session: TypedSession,
@@ -41,13 +34,22 @@ pub async fn admin_dashboard(
 </head>
 <body>
 <p>Welcome {username}!</p>
+<p>Available actions:</p>
+<ol>
+<li><a href="/admin/password">Change password</a></li>
+<li>
+<form name="logoutForm" action="/admin/logout" method="post">
+<input type="submit" value="Logout">
+</form>
+</li>
+</ol>
 </body>
 </html>"#
         )))
 }
 
 #[tracing::instrument(name = "Get username", skip(pool))]
-async fn get_username(user_id: Uuid, pool: &PgPool) -> Result<String, anyhow::Error> {
+pub async fn get_username(user_id: Uuid, pool: &PgPool) -> Result<String, anyhow::Error> {
     let row = sqlx::query!(
         r#"
         SELECT username
