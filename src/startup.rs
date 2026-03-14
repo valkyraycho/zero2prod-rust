@@ -1,4 +1,5 @@
 use crate::{
+    authentication::reject_anonymous_users,
     configuration::{DatabaseSettings, Settings},
     email_client::EmailClient,
     routes::{
@@ -11,6 +12,7 @@ use actix_web::{
     App, HttpServer,
     cookie::Key,
     dev::Server,
+    middleware::from_fn,
     web::{self, Data},
 };
 use actix_web_flash_messages::{FlashMessagesFramework, storage::CookieMessageStore};
@@ -97,15 +99,19 @@ async fn run(
             .wrap(TracingLogger::default())
             .route("/", web::get().to(home))
             .route("/health_check", web::get().to(health_check))
-            .route("/admin/dashboard", web::get().to(admin_dashboard))
-            .route("/admin/password", web::get().to(change_password_form))
-            .route("/admin/password", web::post().to(change_password))
             .route("/login", web::get().to(login_form))
             .route("/login", web::post().to(login))
-            .route("/admin/logout", web::post().to(log_out))
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(confirm))
             .route("/newsletters", web::post().to(publish_newsletter))
+            .service(
+                web::scope("/admin")
+                    .wrap(from_fn(reject_anonymous_users))
+                    .route("/dashboard", web::get().to(admin_dashboard))
+                    .route("/password", web::get().to(change_password_form))
+                    .route("/password", web::post().to(change_password))
+                    .route("/logout", web::post().to(log_out)),
+            )
             .app_data(db_pool.clone())
             .app_data(email_client.clone())
             .app_data(base_url.clone())

@@ -4,9 +4,8 @@ use secrecy::{ExposeSecret, SecretString};
 use sqlx::PgPool;
 
 use crate::{
-    authentication::{AuthError, Credentials, validate_credentials},
+    authentication::{AuthError, Credentials, UserId, validate_credentials},
     routes::get_username,
-    session_state::TypedSession,
     utils::{e500, see_other},
 };
 
@@ -19,13 +18,10 @@ pub struct FormData {
 
 pub async fn change_password(
     form: web::Form<FormData>,
-    session: TypedSession,
     pool: web::Data<PgPool>,
+    user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let Some(user_id) = session.get_user_id().map_err(e500)? else {
-        return Ok(see_other("/login"));
-    };
-
+    let user_id = user_id.into_inner();
     if form.new_password.expose_secret() != form.new_password_check.expose_secret() {
         FlashMessage::error(
             "You entered two different new passwords - the field values must match.",
@@ -33,7 +29,7 @@ pub async fn change_password(
         .send();
         return Ok(see_other("/admin/password"));
     }
-    let username = get_username(user_id, &pool).await.map_err(e500)?;
+    let username = get_username(*user_id, &pool).await.map_err(e500)?;
     let credentials = Credentials {
         username,
         password: form.0.current_password,
@@ -48,7 +44,7 @@ pub async fn change_password(
         };
     }
 
-    crate::authentication::change_password(user_id, form.0.new_password, &pool)
+    crate::authentication::change_password(*user_id, form.0.new_password, &pool)
         .await
         .map_err(e500)?;
 
